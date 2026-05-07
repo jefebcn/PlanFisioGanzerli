@@ -41,7 +41,9 @@ async function writeToBlob(data: DataStore): Promise<void> {
   await put(BLOB_PATH, JSON.stringify(data), {
     access: 'public',
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: 'application/json',
+    cacheControlMaxAge: 0,
   });
 }
 

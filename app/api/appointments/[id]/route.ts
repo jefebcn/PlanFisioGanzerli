@@ -38,8 +38,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (err instanceof OverrideNotAllowedError) {
       return NextResponse.json({ error: 'OVERRIDE_NOT_ALLOWED' }, { status: 403 });
     }
+    const message = err instanceof Error ? err.message : String(err);
     console.error('PATCH /api/appointments error', err);
-    return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
+    return NextResponse.json({ error: 'INTERNAL', message }, { status: 500 });
   }
 }
 

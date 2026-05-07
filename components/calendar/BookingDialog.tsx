@@ -124,7 +124,8 @@ export function BookingDialog({
       }
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        alert(`Errore: ${json.error ?? res.statusText}`);
+        const detail = json.message ? `\n${json.message}` : '';
+        alert(`Errore: ${json.error ?? res.statusText}${detail}`);
         return;
       }
       onCreated();
