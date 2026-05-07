@@ -15,8 +15,8 @@ export function OverrideModal({ open, onClose, onConfirm }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-lg bg-white p-5 shadow-xl" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
         <h2 className="text-lg font-semibold text-slate-900">
           Conferma override conflitto
         </h2>

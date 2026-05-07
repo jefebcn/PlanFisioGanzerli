@@ -25,6 +25,7 @@ export default function CalendarPage() {
     return d;
   });
   const [view, setView] = useState<View>('week');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [patients, setPatients] = useState<Pick<StoredPatient, 'id' | 'fullName'>[]>([]);
@@ -37,7 +38,6 @@ export default function CalendarPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogStart, setDialogStart] = useState<Date>(new Date());
-  const [dialogTherapistId, setDialogTherapistId] = useState<string>('');
 
   const [moveError, setMoveError] = useState<ConflictReport | null>(null);
   const [overrideForMove, setOverrideForMove] = useState<{
@@ -74,7 +74,6 @@ export default function CalendarPage() {
       setVisibleTherapists(new Set(t.therapists.map((x: Therapist) => x.id)));
     });
 
-    // Fetch all users for sidebar avatar quick-switch
     fetch('/api/therapists').then((r) => r.json()).then((d) => setAllUsers(d.therapists));
   }, []);
 
@@ -98,10 +97,9 @@ export default function CalendarPage() {
   }, []);
 
   const handleSlotClick = useCallback((therapistId: string, startsAt: Date) => {
-    setDialogTherapistId(therapistId || (therapists[0]?.id ?? ''));
     setDialogStart(startsAt);
     setDialogOpen(true);
-  }, [therapists]);
+  }, []);
 
   const handleMove = useCallback(
     async (appointmentId: string, newStartsAt: Date, version: number) => {
@@ -175,7 +173,7 @@ export default function CalendarPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      {/* Left sidebar */}
+      {/* Sidebar — drawer on mobile, fixed on desktop */}
       <Sidebar
         selected={date}
         onDateSelect={setDate}
@@ -189,14 +187,30 @@ export default function CalendarPage() {
         onNewAppointment={() => {
           setDialogStart(new Date());
           setDialogOpen(true);
+          setSidebarOpen(false);
         }}
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
       />
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main area — offset on desktop to make room for the always-visible sidebar */}
+      <div className="flex-1 flex flex-col min-w-0 md:ml-0">
         {/* Top bar */}
-        <header className="flex items-center gap-3 px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0">
-          <h1 className="text-base font-semibold text-slate-900 capitalize">{monthLabel}</h1>
+        <header className="flex items-center gap-2 px-3 md:px-5 py-3 bg-white border-b border-slate-200 flex-shrink-0"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+        >
+          {/* Hamburger — mobile only */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-600 flex-shrink-0"
+            aria-label="Apri menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 20 20">
+              <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+          </button>
+
+          <h1 className="text-sm font-semibold text-slate-900 capitalize flex-1 md:flex-none">{monthLabel}</h1>
 
           <div className="flex items-center gap-1">
             <button onClick={() => shiftWeek(-1)} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500">‹</button>
@@ -204,11 +218,11 @@ export default function CalendarPage() {
             <button onClick={() => shiftWeek(1)} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500">›</button>
           </div>
 
-          <div className="flex-1" />
+          <div className="flex-1 hidden md:block" />
 
-          {/* Conflict banner (for move errors) */}
+          {/* Conflict banner for move errors — desktop only inline */}
           {moveError && (
-            <div className="max-w-xs">
+            <div className="max-w-xs hidden md:block">
               <ConflictBanner
                 report={moveError}
                 canOverride={me?.role === 'ADMIN' || me?.role === 'SECRETARY'}
@@ -217,8 +231,8 @@ export default function CalendarPage() {
             </div>
           )}
 
-          {/* View toggle */}
-          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 text-xs font-medium">
+          {/* View toggle — desktop only */}
+          <div className="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 text-xs font-medium">
             {(['month', 'week', 'day'] as View[]).map((v) => (
               <button
                 key={v}
@@ -233,13 +247,25 @@ export default function CalendarPage() {
             ))}
           </div>
 
+          {/* + Nuovo — desktop */}
           <button
             onClick={() => { setDialogStart(new Date()); setDialogOpen(true); }}
-            className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-sm transition-colors"
+            className="hidden md:flex px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-sm transition-colors"
           >
             + Nuovo
           </button>
         </header>
+
+        {/* Move-conflict banner on mobile (below header) */}
+        {moveError && (
+          <div className="md:hidden px-3 py-2 bg-white border-b border-slate-200">
+            <ConflictBanner
+              report={moveError}
+              canOverride={me?.role === 'ADMIN' || me?.role === 'SECRETARY'}
+              onForce={() => {}}
+            />
+          </div>
+        )}
 
         {/* Calendar grid */}
         <div className="flex-1 overflow-hidden">
@@ -254,6 +280,16 @@ export default function CalendarPage() {
           />
         </div>
       </div>
+
+      {/* Floating action button — mobile only */}
+      <button
+        onClick={() => { setDialogStart(new Date()); setDialogOpen(true); }}
+        className="md:hidden fixed bottom-6 right-5 w-14 h-14 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-3xl shadow-xl flex items-center justify-center z-30 transition-colors active:scale-95"
+        style={{ bottom: 'max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))' }}
+        aria-label="Nuovo appuntamento"
+      >
+        +
+      </button>
 
       {/* Booking dialog */}
       {dialogOpen && me && (

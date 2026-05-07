@@ -187,8 +187,8 @@ export function BookingDialog({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+      <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+        <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-y-auto max-h-[92svh]">
           {/* Header with patient combobox */}
           <div className="px-6 pt-6 pb-4 relative">
             <button
@@ -403,7 +403,7 @@ export function BookingDialog({
           </div>
 
           {/* Footer */}
-          <div className="px-6 pb-5 flex gap-2">
+          <div className="px-6 pb-5 flex gap-2" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
             <button
               type="button"
               disabled={submitDisabled}

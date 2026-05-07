@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppointmentDTO } from '@/lib/agenda/types';
 
 interface Props {
@@ -32,7 +32,15 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(appointment.patient.fullName);
   const [saving, setSaving] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   async function saveName() {
     const trimmed = nameValue.trim();
@@ -63,12 +71,21 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
     setTimeout(() => inputRef.current?.select(), 0);
   }
 
+  // Mobile: full-width bottom sheet; Desktop: floating popup
+  const containerStyle = isMobile
+    ? {}
+    : { top: anchorTop, left: anchorLeft, width: 300 };
+
+  const containerClass = isMobile
+    ? 'fixed z-50 bottom-0 left-0 right-0 rounded-t-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden'
+    : 'fixed z-50 rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden';
+
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="fixed z-50 rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
-        style={{ top: anchorTop, left: anchorLeft, width: 300 }}
+        className={containerClass}
+        style={containerStyle}
       >
         {/* Header */}
         <div
@@ -206,7 +223,7 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
         </div>
 
         {/* Footer */}
-        <div className="px-4 pb-3 pt-1 flex justify-end">
+        <div className="px-4 pt-1 flex justify-end" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <button
             onClick={() => { onDelete(appointment.id); onClose(); }}
             className="text-xs text-rose-400 hover:text-rose-600 transition-colors"
