@@ -30,7 +30,7 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
   const endsAt = new Date(appointment.endsAt);
 
   const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState(appointment.patient.fullName);
+  const [nameValue, setNameValue] = useState(appointment.patient?.fullName ?? '');
   const [saving, setSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,20 +44,20 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
 
   async function saveName() {
     const trimmed = nameValue.trim();
-    if (!trimmed || trimmed === appointment.patient.fullName) {
+    if (!trimmed || trimmed === (appointment.patient?.fullName ?? '')) {
       setEditingName(false);
-      setNameValue(appointment.patient.fullName);
+      setNameValue(appointment.patient?.fullName ?? '');
       return;
     }
     setSaving(true);
     try {
-      const res = await fetch(`/api/patients/${appointment.patient.id}`, {
+      const res = await fetch(`/api/patients/${appointment.patient?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: trimmed }),
       });
       if (res.ok) {
-        onPatientRenamed?.(appointment.patient.id, trimmed);
+        onPatientRenamed?.(appointment.patient?.id ?? '', trimmed);
         setNameValue(trimmed);
       }
     } finally {
@@ -90,7 +90,7 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
         {/* Header */}
         <div
           className="px-4 pt-4 pb-3 relative"
-          style={{ backgroundColor: appointment.therapist.color + '18' }}
+          style={{ backgroundColor: (appointment.therapist?.color ?? '#94a3b8') + '18' }}
         >
           <button
             onClick={onClose}
@@ -99,8 +99,8 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
             ×
           </button>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: appointment.therapist.color }} />
-            <span className="text-xs text-slate-500">{appointment.therapy.name}</span>
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: appointment.therapist?.color ?? '#94a3b8' }} />
+            <span className="text-xs text-slate-500">{appointment.therapy?.name}</span>
           </div>
 
           {/* Patient name — editable */}
@@ -112,7 +112,7 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
                 onChange={(e) => setNameValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') saveName();
-                  if (e.key === 'Escape') { setEditingName(false); setNameValue(appointment.patient.fullName); }
+                  if (e.key === 'Escape') { setEditingName(false); setNameValue(appointment.patient?.fullName ?? ''); }
                 }}
                 className="flex-1 text-base font-semibold text-slate-900 bg-white/70 border border-slate-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-violet-400"
                 autoFocus
@@ -182,13 +182,13 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
           <div className="flex items-center gap-2.5">
             <div
               className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-              style={{ backgroundColor: appointment.therapist.color }}
+              style={{ backgroundColor: appointment.therapist?.color ?? '#94a3b8' }}
             >
-              {appointment.therapist.name.charAt(0)}
+              {(appointment.therapist?.name ?? '?').charAt(0)}
             </div>
             <div>
               <div className="text-xs text-slate-500">Operatore</div>
-              <div className="text-sm font-medium text-slate-800">{appointment.therapist.name}</div>
+              <div className="text-sm font-medium text-slate-800">{appointment.therapist?.name ?? '—'}</div>
             </div>
           </div>
 

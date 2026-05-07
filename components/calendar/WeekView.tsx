@@ -222,16 +222,16 @@ export function WeekView({
                         style={{
                           top,
                           height,
-                          backgroundColor: a.therapist.color + '22',
-                          borderLeft: `3px solid ${a.therapist.color}`,
+                          backgroundColor: (a.therapist?.color ?? '#94a3b8') + '22',
+                          borderLeft: `3px solid ${a.therapist?.color ?? '#94a3b8'}`,
                         }}
                       >
-                        <div className="text-[10px] font-semibold leading-tight truncate" style={{ color: a.therapist.color }}>
-                          {a.patient.fullName}
+                        <div className="text-[10px] font-semibold leading-tight truncate" style={{ color: a.therapist?.color ?? '#94a3b8' }}>
+                          {a.patient?.fullName ?? '—'}
                         </div>
                         {height > 36 && (
                           <div className="text-[9px] text-slate-500 truncate leading-tight mt-0.5">
-                            {a.therapy.name}
+                            {a.therapy?.name}
                           </div>
                         )}
                         {height > 52 && a.resourceBookings.length > 0 && (
@@ -240,7 +240,7 @@ export function WeekView({
                               <span
                                 key={rb.id}
                                 className="text-[9px] px-1 py-0 rounded-full font-medium"
-                                style={{ backgroundColor: a.therapist.color + '33', color: a.therapist.color }}
+                                style={{ backgroundColor: (a.therapist?.color ?? '#94a3b8') + '33', color: a.therapist?.color ?? '#94a3b8' }}
                               >
                                 {rb.resource.name}
                               </span>

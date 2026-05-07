@@ -138,7 +138,9 @@ export default function CalendarPage() {
   const handlePatientRenamed = useCallback((patientId: string, newName: string) => {
     setPatients((prev) => prev.map((p) => p.id === patientId ? { ...p, fullName: newName } : p));
     setAppointments((prev) => prev.map((a) =>
-      a.patientId === patientId ? { ...a, patient: { ...a.patient, fullName: newName } } : a,
+      a.patientId === patientId
+        ? { ...a, patient: { id: a.patient?.id ?? patientId, fullName: newName } }
+        : a,
     ));
   }, []);
 

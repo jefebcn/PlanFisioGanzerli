@@ -29,16 +29,22 @@ export async function GET(request: Request) {
       const therapist = store.users.find((u) => u.id === a.therapistId);
       const patient = store.patients.find((p) => p.id === a.patientId);
       const therapy = store.therapies.find((t) => t.id === a.therapyId);
-      const resourceBookings = a.resourceBookings.map((rb) => ({
-        ...rb,
-        resource: store.resources.find((r) => r.id === rb.resourceId)!,
-      }));
       return {
         ...a,
-        therapist: therapist ? { id: therapist.id, name: therapist.name, color: therapist.color } : null,
-        patient: patient ? { id: patient.id, fullName: patient.fullName } : null,
-        therapy: therapy ? { id: therapy.id, name: therapy.name, durationMinutes: therapy.durationMinutes } : null,
-        resourceBookings,
+        therapist: therapist
+          ? { id: therapist.id, name: therapist.name, color: therapist.color }
+          : { id: a.therapistId, name: 'Operatore', color: '#94a3b8' },
+        patient: patient
+          ? { id: patient.id, fullName: patient.fullName }
+          : { id: a.patientId, fullName: 'Paziente' },
+        therapy: therapy
+          ? { id: therapy.id, name: therapy.name, durationMinutes: therapy.durationMinutes }
+          : { id: a.therapyId, name: 'Terapia', durationMinutes: 0 },
+        resourceBookings: a.resourceBookings.map((rb) => ({
+          ...rb,
+          resource: store.resources.find((r) => r.id === rb.resourceId)
+            ?? { id: rb.resourceId, name: 'Risorsa', type: 'ROOM' as const, active: true },
+        })),
         override: a.override ?? null,
       };
     });
