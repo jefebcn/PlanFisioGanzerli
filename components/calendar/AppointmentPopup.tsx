@@ -1,6 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
+import { useRef, useState } from 'react';
 import type { AppointmentDTO } from '@/lib/agenda/types';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
   anchorLeft: number;
   onClose: () => void;
   onDelete: (id: string) => void;
+  onPatientRenamed?: (patientId: string, newName: string) => void;
 }
 
 function formatTime(d: Date | string): string {
@@ -23,16 +25,50 @@ const RESOURCE_COLORS: Record<string, string> = {
   ROOM: 'bg-slate-100 text-slate-700',
 };
 
-export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, onDelete }: Props) {
+export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, onDelete, onPatientRenamed }: Props) {
   const startsAt = new Date(appointment.startsAt);
   const endsAt = new Date(appointment.endsAt);
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(appointment.patient.fullName);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function saveName() {
+    const trimmed = nameValue.trim();
+    if (!trimmed || trimmed === appointment.patient.fullName) {
+      setEditingName(false);
+      setNameValue(appointment.patient.fullName);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/patients/${appointment.patient.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName: trimmed }),
+      });
+      if (res.ok) {
+        onPatientRenamed?.(appointment.patient.id, trimmed);
+        setNameValue(trimmed);
+      }
+    } finally {
+      setSaving(false);
+      setEditingName(false);
+    }
+  }
+
+  function startEdit() {
+    setEditingName(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  }
 
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="absolute z-50 w-72 rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
-        style={{ top: anchorTop, left: anchorLeft }}
+        className="fixed z-50 rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
+        style={{ top: anchorTop, left: anchorLeft, width: 300 }}
       >
         {/* Header */}
         <div
@@ -49,9 +85,45 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: appointment.therapist.color }} />
             <span className="text-xs text-slate-500">{appointment.therapy.name}</span>
           </div>
-          <div className="text-base font-semibold text-slate-900 leading-tight">
-            {appointment.patient.fullName}
-          </div>
+
+          {/* Patient name — editable */}
+          {editingName ? (
+            <div className="flex items-center gap-1.5 pr-8">
+              <input
+                ref={inputRef}
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') { setEditingName(false); setNameValue(appointment.patient.fullName); }
+                }}
+                className="flex-1 text-base font-semibold text-slate-900 bg-white/70 border border-slate-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-violet-400"
+                autoFocus
+              />
+              <button
+                onClick={saveName}
+                disabled={saving}
+                className="px-2 py-0.5 rounded-lg bg-violet-600 text-white text-xs font-semibold disabled:opacity-50"
+              >
+                {saving ? '…' : 'OK'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 group pr-8">
+              <div className="text-base font-semibold text-slate-900 leading-tight">
+                {nameValue}
+              </div>
+              <button
+                onClick={startEdit}
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-violet-600"
+                title="Modifica nome paziente"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 16 16">
+                  <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          )}
 
           {/* Tab-style row */}
           <div className="flex gap-1 mt-2.5">
@@ -76,7 +148,8 @@ export function AppointmentPopup({ appointment, anchorTop, anchorLeft, onClose, 
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
               <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 16 16">
-                <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2.5v3.75l2.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M8 4.5V8l2.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
             </div>
             <div>

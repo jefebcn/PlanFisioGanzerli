@@ -52,6 +52,7 @@ interface Props {
   onSlotClick: (therapistId: string, startsAt: Date) => void;
   onMove: (id: string, newStartsAt: Date, version: number) => Promise<void>;
   onDelete: (id: string) => void;
+  onPatientRenamed?: (patientId: string, newName: string) => void;
 }
 
 export function WeekView({
@@ -61,6 +62,7 @@ export function WeekView({
   onSlotClick,
   onMove,
   onDelete,
+  onPatientRenamed,
 }: Props) {
   const days = getWeekDays(date);
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -195,11 +197,13 @@ export function WeekView({
                       onClick={(e) => {
                         e.stopPropagation();
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        setPopup({
-                          appt: a,
-                          top: rect.top + window.scrollY,
-                          left: Math.min(rect.right + 8, window.innerWidth - 300),
-                        });
+                        const POPUP_W = 304;
+                        const POPUP_H = 420;
+                        const left = rect.right + 8 + POPUP_W > window.innerWidth
+                          ? Math.max(0, rect.left - POPUP_W - 8)
+                          : rect.right + 8;
+                        const top = Math.max(8, Math.min(rect.top, window.innerHeight - POPUP_H - 8));
+                        setPopup({ appt: a, top, left });
                       }}
                       className={clsx(
                         'absolute left-0.5 right-0.5 rounded-xl px-2 py-1.5 cursor-pointer select-none transition-all',
@@ -252,6 +256,7 @@ export function WeekView({
           anchorLeft={popup.left}
           onClose={() => setPopup(null)}
           onDelete={(id) => { onDelete(id); setPopup(null); }}
+          onPatientRenamed={onPatientRenamed}
         />
       )}
     </div>

@@ -137,6 +137,13 @@ export default function CalendarPage() {
     setAppointments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
+  const handlePatientRenamed = useCallback((patientId: string, newName: string) => {
+    setPatients((prev) => prev.map((p) => p.id === patientId ? { ...p, fullName: newName } : p));
+    setAppointments((prev) => prev.map((a) =>
+      a.patientId === patientId ? { ...a, patient: { ...a.patient, fullName: newName } } : a,
+    ));
+  }, []);
+
   const handleSwitchUser = useCallback(async (userId: string) => {
     await fetch('/api/me', {
       method: 'POST',
@@ -243,6 +250,7 @@ export default function CalendarPage() {
             onSlotClick={handleSlotClick}
             onMove={handleMove}
             onDelete={handleDelete}
+            onPatientRenamed={handlePatientRenamed}
           />
         </div>
       </div>
