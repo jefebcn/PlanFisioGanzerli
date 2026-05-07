@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: planfisio-postgres
+    environment:
+      POSTGRES_USER: planfisio
+      POSTGRES_PASSWORD: planfisio
+      POSTGRES_DB: planfisio
+    ports:
+      - "5432:5432"
+    volumes:
+      - planfisio-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planfisio"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  planfisio-pgdata:
