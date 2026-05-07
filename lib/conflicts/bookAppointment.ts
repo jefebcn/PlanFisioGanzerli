@@ -12,6 +12,7 @@ import {
 
 export interface BookAppointmentInput extends CheckConflictInput {
   notes?: string | null;
+  newPatientName?: string;
 }
 
 export interface BookingContext {
@@ -26,10 +27,9 @@ export interface MoveAppointmentInput {
   expectedVersion: number;
 }
 
-function assertCanOverride(ctx: BookingContext): void {
-  if (!ctx.override || !OVERRIDE_ROLES.includes(ctx.actor.role)) {
-    throw new OverrideNotAllowedError();
-  }
+function checkOverride(ctx: BookingContext): void {
+  if (!ctx.override) throw new ConflictError({ hasHardConflict: true, hasSoftConflict: false, items: [] });
+  if (!OVERRIDE_ROLES.includes(ctx.actor.role)) throw new OverrideNotAllowedError();
 }
 
 export async function bookAppointment(
@@ -37,18 +37,28 @@ export async function bookAppointment(
   ctx: BookingContext,
 ): Promise<StoredAppointment> {
   const store = await readStore();
-  const report = await checkConflict(input, store);
+
+  // Create patient atomically in the same read-write cycle to avoid race conditions
+  let patientId = input.patientId;
+  if (input.newPatientName?.trim()) {
+    const newPatient = { id: crypto.randomUUID(), fullName: input.newPatientName.trim() };
+    store.patients.push(newPatient);
+    patientId = newPatient.id;
+  }
+
+  const report = await checkConflict({ ...input, patientId }, store);
 
   if (report.hasHardConflict) {
     if (report.items.find((i) => i.kind === 'INVALID_RANGE')) throw new ConflictError(report);
-    assertCanOverride(ctx);
+    if (!ctx.override) throw new ConflictError(report);
+    if (!OVERRIDE_ROLES.includes(ctx.actor.role)) throw new OverrideNotAllowedError();
   }
 
   const now = new Date().toISOString();
   const appointment: StoredAppointment = {
     id: crypto.randomUUID(),
     therapistId: input.therapistId,
-    patientId: input.patientId,
+    patientId,
     therapyId: input.therapyId,
     startsAt: input.startsAt.toISOString(),
     endsAt: input.endsAt.toISOString(),
@@ -106,7 +116,8 @@ export async function moveAppointment(
 
   if (report.hasHardConflict) {
     if (report.items.find((i) => i.kind === 'INVALID_RANGE')) throw new ConflictError(report);
-    assertCanOverride(ctx);
+    if (!ctx.override) throw new ConflictError(report);
+    if (!OVERRIDE_ROLES.includes(ctx.actor.role)) throw new OverrideNotAllowedError();
   }
 
   const updated: StoredAppointment = {

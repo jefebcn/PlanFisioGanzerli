@@ -151,29 +151,13 @@ export function BookingDialog({
     if (!trimmedName) return;
     setSubmitting(true);
     try {
-      let resolvedPatientId = patientId;
-
-      // Create new patient on the fly
-      if (isNewPatient) {
-        const pRes = await fetch('/api/patients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fullName: trimmedName }),
-        });
-        if (!pRes.ok) {
-          alert('Errore nella creazione del paziente');
-          return;
-        }
-        const { patient } = await pRes.json();
-        resolvedPatientId = patient.id;
-        setPatientId(patient.id);
-      }
-
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          therapistId, patientId: resolvedPatientId, therapyId,
+          therapistId,
+          ...(isNewPatient ? { newPatientName: trimmedName } : { patientId }),
+          therapyId,
           startsAt: startsAtDate.toISOString(),
           endsAt: endsAtDate.toISOString(),
           resourceIds,

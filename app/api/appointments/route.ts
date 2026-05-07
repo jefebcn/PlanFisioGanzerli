@@ -59,7 +59,8 @@ export async function POST(request: Request) {
     const appointment = await bookAppointment(
       {
         therapistId: data.therapistId,
-        patientId: data.patientId,
+        patientId: data.patientId ?? '',
+        newPatientName: data.newPatientName,
         therapyId: data.therapyId,
         startsAt: new Date(data.startsAt),
         endsAt: new Date(data.endsAt),

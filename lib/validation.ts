@@ -11,13 +11,16 @@ export const overrideSchema = z.object({
 
 export const createAppointmentSchema = z.object({
   therapistId: z.string().min(1),
-  patientId: z.string().min(1),
+  patientId: z.string().optional(),
+  newPatientName: z.string().min(1).max(200).optional(),
   therapyId: z.string().min(1),
   startsAt: isoDateTime,
   endsAt: isoDateTime,
   resourceIds: z.array(z.string()).default([]),
   notes: z.string().max(2000).optional().nullable(),
   override: overrideSchema.optional(),
+}).refine((d) => d.patientId || d.newPatientName, {
+  message: 'patientId o newPatientName obbligatorio',
 });
 
 export const checkConflictSchema = z.object({
