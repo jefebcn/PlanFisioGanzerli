@@ -1,8 +1,8 @@
-import type { Appointment, ResourceBooking } from '@prisma/client';
+import type { StoredAppointment, StoredResourceBooking } from '@/lib/storage/types';
 import type { ConflictReport } from '@/lib/conflicts';
 
-export type AppointmentWithResources = Appointment & {
-  resourceBookings: ResourceBooking[];
+export type AppointmentWithResources = StoredAppointment & {
+  resourceBookings: StoredResourceBooking[];
 };
 
 export interface AppointmentEventBase {

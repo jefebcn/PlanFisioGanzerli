@@ -20,3 +20,6 @@ coverage/
 .tsbuildinfo
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Local Vercel Blob fallback storage
+.planfisio-store.json

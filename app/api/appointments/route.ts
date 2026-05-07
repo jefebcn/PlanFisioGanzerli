@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { readStore } from '@/lib/storage/blobStore';
 import { getCurrentActor } from '@/lib/auth';
-import {
-  bookAppointment,
-  ConflictError,
-  OverrideNotAllowedError,
-} from '@/lib/conflicts';
+import { bookAppointment, ConflictError, OverrideNotAllowedError } from '@/lib/conflicts';
 import { broadcastAppointmentCreated } from '@/lib/realtime/broadcast';
 import { createAppointmentSchema } from '@/lib/validation';
 
@@ -15,22 +11,37 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
-  const where =
-    from && to
-      ? { startsAt: { gte: new Date(from) }, endsAt: { lte: new Date(to) } }
-      : {};
 
-  const appointments = await prisma.appointment.findMany({
-    where,
-    include: {
-      therapist: { select: { id: true, name: true, color: true } },
-      patient: { select: { id: true, fullName: true } },
-      therapy: { select: { id: true, name: true, durationMinutes: true } },
-      resourceBookings: { include: { resource: true } },
-      override: true,
-    },
-    orderBy: { startsAt: 'asc' },
-  });
+  const store = await readStore();
+
+  let appts = store.appointments;
+  if (from && to) {
+    const fromMs = new Date(from).getTime();
+    const toMs = new Date(to).getTime();
+    appts = appts.filter(
+      (a) => new Date(a.startsAt).getTime() >= fromMs && new Date(a.endsAt).getTime() <= toMs,
+    );
+  }
+
+  const appointments = appts
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .map((a) => {
+      const therapist = store.users.find((u) => u.id === a.therapistId);
+      const patient = store.patients.find((p) => p.id === a.patientId);
+      const therapy = store.therapies.find((t) => t.id === a.therapyId);
+      const resourceBookings = a.resourceBookings.map((rb) => ({
+        ...rb,
+        resource: store.resources.find((r) => r.id === rb.resourceId)!,
+      }));
+      return {
+        ...a,
+        therapist: therapist ? { id: therapist.id, name: therapist.name, color: therapist.color } : null,
+        patient: patient ? { id: patient.id, fullName: patient.fullName } : null,
+        therapy: therapy ? { id: therapy.id, name: therapy.name, durationMinutes: therapy.durationMinutes } : null,
+        resourceBookings,
+        override: a.override ?? null,
+      };
+    });
 
   return NextResponse.json({ appointments });
 }
@@ -39,10 +50,7 @@ export async function POST(request: Request) {
   const json = await request.json();
   const parsed = createAppointmentSchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'INVALID_INPUT', details: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'INVALID_INPUT', details: parsed.error.flatten() }, { status: 400 });
   }
 
   try {
@@ -61,24 +69,15 @@ export async function POST(request: Request) {
       { actor, override: data.override },
     );
 
-    const enriched = await prisma.appointment.findUniqueOrThrow({
-      where: { id: appointment.id },
-      include: { resourceBookings: true },
-    });
-    broadcastAppointmentCreated(enriched);
-
-    return NextResponse.json({ appointment: enriched }, { status: 201 });
+    broadcastAppointmentCreated(appointment);
+    return NextResponse.json({ appointment }, { status: 201 });
   } catch (err) {
     if (err instanceof ConflictError) {
-      return NextResponse.json(
-        { error: 'CONFLICT', report: err.report },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: 'CONFLICT', report: err.report }, { status: 409 });
     }
     if (err instanceof OverrideNotAllowedError) {
       return NextResponse.json({ error: 'OVERRIDE_NOT_ALLOWED' }, { status: 403 });
     }
-    // eslint-disable-next-line no-console
     console.error('POST /api/appointments error', err);
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }

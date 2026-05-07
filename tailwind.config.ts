@@ -8,6 +8,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        nunito: ['var(--font-nunito)', 'Nunito', 'sans-serif'],
+      },
       colors: {
         conflict: {
           hard: '#dc2626',

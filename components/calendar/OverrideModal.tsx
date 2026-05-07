@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { OverrideInput } from '@/lib/conflicts';
+import type { OverrideInput } from '@/lib/conflicts/types';
 
 interface Props {
   open: boolean;

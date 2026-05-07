@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import type { ConflictReport } from '@/lib/conflicts';
+import type { ConflictReport } from '@/lib/conflicts/types';
 
 interface Props {
   report: ConflictReport | null;

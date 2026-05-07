@@ -1,17 +1,17 @@
 import type {
-  Appointment,
-  ConflictOverride,
-  Patient,
-  Resource,
-  ResourceBooking,
-  Therapy,
-  User,
-} from '@prisma/client';
+  StoredAppointment,
+  StoredConflictOverride,
+  StoredResource,
+  StoredResourceBooking,
+  StoredTherapy,
+  StoredUser,
+  StoredPatient,
+} from '@/lib/storage/types';
 
-export type AppointmentDTO = Appointment & {
-  therapist: Pick<User, 'id' | 'name' | 'color'>;
-  patient: Pick<Patient, 'id' | 'fullName'>;
-  therapy: Pick<Therapy, 'id' | 'name' | 'durationMinutes'>;
-  resourceBookings: (ResourceBooking & { resource: Resource })[];
-  override: ConflictOverride | null;
+export type AppointmentDTO = Omit<StoredAppointment, 'override' | 'resourceBookings'> & {
+  therapist: Pick<StoredUser, 'id' | 'name' | 'color'>;
+  patient: Pick<StoredPatient, 'id' | 'fullName'>;
+  therapy: Pick<StoredTherapy, 'id' | 'name' | 'durationMinutes'>;
+  resourceBookings: (StoredResourceBooking & { resource: StoredResource })[];
+  override: StoredConflictOverride | null;
 };

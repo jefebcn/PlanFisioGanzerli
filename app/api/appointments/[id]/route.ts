@@ -1,31 +1,17 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { readStore, writeStore } from '@/lib/storage/blobStore';
 import { getCurrentActor } from '@/lib/auth';
-import {
-  ConflictError,
-  OverrideNotAllowedError,
-  StaleVersionError,
-  moveAppointment,
-} from '@/lib/conflicts';
-import {
-  broadcastAppointmentDeleted,
-  broadcastAppointmentUpdated,
-} from '@/lib/realtime/broadcast';
+import { ConflictError, OverrideNotAllowedError, StaleVersionError, moveAppointment } from '@/lib/conflicts';
+import { broadcastAppointmentDeleted, broadcastAppointmentUpdated } from '@/lib/realtime/broadcast';
 import { moveAppointmentSchema } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const json = await request.json();
   const parsed = moveAppointmentSchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'INVALID_INPUT', details: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'INVALID_INPUT', details: parsed.error.flatten() }, { status: 400 });
   }
 
   try {
@@ -40,19 +26,11 @@ export async function PATCH(
       { actor, override: parsed.data.override },
     );
 
-    const enriched = await prisma.appointment.findUniqueOrThrow({
-      where: { id: updated.id },
-      include: { resourceBookings: true },
-    });
-    broadcastAppointmentUpdated(enriched);
-
-    return NextResponse.json({ appointment: enriched });
+    broadcastAppointmentUpdated(updated);
+    return NextResponse.json({ appointment: updated });
   } catch (err) {
     if (err instanceof ConflictError) {
-      return NextResponse.json(
-        { error: 'CONFLICT', report: err.report },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: 'CONFLICT', report: err.report }, { status: 409 });
     }
     if (err instanceof StaleVersionError) {
       return NextResponse.json({ error: 'STALE_VERSION' }, { status: 409 });
@@ -60,21 +38,18 @@ export async function PATCH(
     if (err instanceof OverrideNotAllowedError) {
       return NextResponse.json({ error: 'OVERRIDE_NOT_ALLOWED' }, { status: 403 });
     }
-    // eslint-disable-next-line no-console
     console.error('PATCH /api/appointments error', err);
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } },
-) {
-  const existing = await prisma.appointment.findUnique({
-    where: { id: params.id },
-  });
-  if (!existing) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
-  await prisma.appointment.delete({ where: { id: params.id } });
-  broadcastAppointmentDeleted(params.id, existing.startsAt);
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  const store = await readStore();
+  const idx = store.appointments.findIndex((a) => a.id === params.id);
+  if (idx === -1) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+
+  const [deleted] = store.appointments.splice(idx, 1);
+  await writeStore(store);
+  broadcastAppointmentDeleted(params.id, deleted.startsAt);
   return NextResponse.json({ ok: true });
 }

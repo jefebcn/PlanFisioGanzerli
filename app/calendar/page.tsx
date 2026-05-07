@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Patient, Resource, Therapy, UserRole } from '@prisma/client';
+import type { StoredPatient, StoredResource, StoredTherapy, UserRole } from '@/lib/storage/types';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { WeekView } from '@/components/calendar/WeekView';
 import { BookingDialog } from '@/components/calendar/BookingDialog';
@@ -10,7 +10,7 @@ import { OverrideModal } from '@/components/calendar/OverrideModal';
 import type { AppointmentDTO } from '@/lib/agenda/types';
 import { isoDate } from '@/lib/agenda/time';
 import { useRealtimeAgenda } from '@/lib/realtime/useRealtimeAgenda';
-import type { ConflictReport, OverrideInput } from '@/lib/conflicts';
+import type { ConflictReport, OverrideInput } from '@/lib/conflicts/types';
 import clsx from 'clsx';
 
 type Therapist = { id: string; name: string; color: string };
@@ -27,9 +27,9 @@ export default function CalendarPage() {
   const [view, setView] = useState<View>('week');
 
   const [therapists, setTherapists] = useState<Therapist[]>([]);
-  const [patients, setPatients] = useState<Pick<Patient, 'id' | 'fullName'>[]>([]);
-  const [therapies, setTherapies] = useState<Therapy[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [patients, setPatients] = useState<Pick<StoredPatient, 'id' | 'fullName'>[]>([]);
+  const [therapies, setTherapies] = useState<StoredTherapy[]>([]);
+  const [resources, setResources] = useState<StoredResource[]>([]);
   const [appointments, setAppointments] = useState<AppointmentDTO[]>([]);
   const [me, setMe] = useState<UserInfo | null>(null);
   const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
@@ -178,6 +178,7 @@ export default function CalendarPage() {
         currentUserId={me?.id ?? null}
         allUsers={allUsers}
         onSwitchUser={handleSwitchUser}
+        appointments={appointments}
         onNewAppointment={() => {
           setDialogStart(new Date());
           setDialogOpen(true);

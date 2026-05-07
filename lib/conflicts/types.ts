@@ -1,4 +1,4 @@
-import type { OverrideReason, UserRole } from '@prisma/client';
+import type { OverrideReason, UserRole } from '@/lib/storage/types';
 
 export type ConflictKind =
   | 'THERAPIST_BUSY'

@@ -1,11 +1,8 @@
-import type { Appointment, Prisma } from '@prisma/client';
-import { prisma } from '../db';
+import crypto from 'crypto';
+import { readStore, writeStore } from '@/lib/storage/blobStore';
+import type { StoredAppointment } from '@/lib/storage/types';
 import { checkConflict } from './checkConflict';
-import {
-  ConflictError,
-  OverrideNotAllowedError,
-  StaleVersionError,
-} from './errors';
+import { ConflictError, OverrideNotAllowedError, StaleVersionError } from './errors';
 import {
   OVERRIDE_ROLES,
   type BookingActor,
@@ -29,132 +26,113 @@ export interface MoveAppointmentInput {
   expectedVersion: number;
 }
 
-function dayBucketKey(therapistId: string, startsAt: Date): string {
-  const day = startsAt.toISOString().slice(0, 10);
-  return `${therapistId}:${day}`;
-}
-
-async function acquireDayLock(
-  tx: Prisma.TransactionClient,
-  therapistId: string,
-  startsAt: Date,
-): Promise<void> {
-  const key = dayBucketKey(therapistId, startsAt);
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
-}
-
-function assertCanOverride(
-  ctx: BookingContext,
-  reportItems: { severity: 'HARD' | 'SOFT' }[],
-): void {
-  if (!ctx.override) throw new OverrideNotAllowedError();
-  if (!OVERRIDE_ROLES.includes(ctx.actor.role)) {
+function assertCanOverride(ctx: BookingContext): void {
+  if (!ctx.override || !OVERRIDE_ROLES.includes(ctx.actor.role)) {
     throw new OverrideNotAllowedError();
   }
-  // Hard conflicts SOLO su risorse o operatori, non su range invalidi
-  // (un range invalido va corretto, non forzato).
-  // Già garantito da checkConflict che ritorna HARD su INVALID_RANGE.
-  void reportItems;
 }
 
 export async function bookAppointment(
   input: BookAppointmentInput,
   ctx: BookingContext,
-): Promise<Appointment> {
-  return prisma.$transaction(async (tx) => {
-    await acquireDayLock(tx, input.therapistId, input.startsAt);
+): Promise<StoredAppointment> {
+  const store = await readStore();
+  const report = await checkConflict(input, store);
 
-    const report = await checkConflict(input, tx);
+  if (report.hasHardConflict) {
+    if (report.items.find((i) => i.kind === 'INVALID_RANGE')) throw new ConflictError(report);
+    assertCanOverride(ctx);
+  }
 
-    if (report.hasHardConflict) {
-      const invalidRange = report.items.find((i) => i.kind === 'INVALID_RANGE');
-      if (invalidRange) throw new ConflictError(report);
-      assertCanOverride(ctx, report.items);
-    }
+  const now = new Date().toISOString();
+  const appointment: StoredAppointment = {
+    id: crypto.randomUUID(),
+    therapistId: input.therapistId,
+    patientId: input.patientId,
+    therapyId: input.therapyId,
+    startsAt: input.startsAt.toISOString(),
+    endsAt: input.endsAt.toISOString(),
+    status: 'SCHEDULED',
+    notes: input.notes ?? undefined,
+    createdById: ctx.actor.id,
+    version: 0,
+    resourceBookings: input.resourceIds.map((resourceId) => ({
+      id: crypto.randomUUID(),
+      resourceId,
+      startsAt: input.startsAt.toISOString(),
+      endsAt: input.endsAt.toISOString(),
+    })),
+    ...(ctx.override
+      ? {
+          override: {
+            reason: ctx.override.reason,
+            note: ctx.override.note,
+            approvedById: ctx.actor.id,
+            createdAt: now,
+          },
+        }
+      : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
 
-    const appointment = await tx.appointment.create({
-      data: {
-        therapistId: input.therapistId,
-        patientId: input.patientId,
-        therapyId: input.therapyId,
-        startsAt: input.startsAt,
-        endsAt: input.endsAt,
-        notes: input.notes ?? null,
-        createdById: ctx.actor.id,
-        resourceBookings: {
-          create: input.resourceIds.map((resourceId) => ({
-            resourceId,
-            startsAt: input.startsAt,
-            endsAt: input.endsAt,
-          })),
-        },
-        ...(ctx.override
-          ? {
-              override: {
-                create: {
-                  reason: ctx.override.reason,
-                  note: ctx.override.note,
-                  approvedById: ctx.actor.id,
-                },
-              },
-            }
-          : {}),
-      },
-    });
-
-    return appointment;
-  });
+  store.appointments.push(appointment);
+  await writeStore(store);
+  return appointment;
 }
 
 export async function moveAppointment(
   input: MoveAppointmentInput,
   ctx: BookingContext,
-): Promise<Appointment> {
-  return prisma.$transaction(async (tx) => {
-    const current = await tx.appointment.findUnique({
-      where: { id: input.appointmentId },
-      include: { resourceBookings: true },
-    });
-    if (!current) throw new Error(`Appointment ${input.appointmentId} non trovato`);
+): Promise<StoredAppointment> {
+  const store = await readStore();
+  const idx = store.appointments.findIndex((a) => a.id === input.appointmentId);
+  if (idx === -1) throw new Error(`Appointment ${input.appointmentId} non trovato`);
+  const current = store.appointments[idx];
 
-    await acquireDayLock(tx, current.therapistId, input.startsAt);
+  if (current.version !== input.expectedVersion) throw new StaleVersionError(current.id);
 
-    const checkInput: CheckConflictInput = {
-      appointmentId: current.id,
-      therapistId: current.therapistId,
-      patientId: current.patientId,
-      therapyId: current.therapyId,
-      startsAt: input.startsAt,
-      endsAt: input.endsAt,
-      resourceIds: current.resourceBookings.map((rb) => rb.resourceId),
-    };
-    const report = await checkConflict(checkInput, tx);
+  const checkInput: CheckConflictInput = {
+    appointmentId: current.id,
+    therapistId: current.therapistId,
+    patientId: current.patientId,
+    therapyId: current.therapyId,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    resourceIds: current.resourceBookings.map((rb) => rb.resourceId),
+  };
 
-    if (report.hasHardConflict) {
-      const invalidRange = report.items.find((i) => i.kind === 'INVALID_RANGE');
-      if (invalidRange) throw new ConflictError(report);
-      assertCanOverride(ctx, report.items);
-    }
+  const report = await checkConflict(checkInput, store);
 
-    // Optimistic locking: aggiorno solo se la version corrisponde.
-    const updateResult = await tx.appointment.updateMany({
-      where: { id: current.id, version: input.expectedVersion },
-      data: {
-        startsAt: input.startsAt,
-        endsAt: input.endsAt,
-        version: { increment: 1 },
-      },
-    });
-    if (updateResult.count === 0) throw new StaleVersionError(current.id);
+  if (report.hasHardConflict) {
+    if (report.items.find((i) => i.kind === 'INVALID_RANGE')) throw new ConflictError(report);
+    assertCanOverride(ctx);
+  }
 
-    await tx.resourceBooking.updateMany({
-      where: { appointmentId: current.id },
-      data: { startsAt: input.startsAt, endsAt: input.endsAt },
-    });
+  const updated: StoredAppointment = {
+    ...current,
+    startsAt: input.startsAt.toISOString(),
+    endsAt: input.endsAt.toISOString(),
+    version: current.version + 1,
+    updatedAt: new Date().toISOString(),
+    resourceBookings: current.resourceBookings.map((rb) => ({
+      ...rb,
+      startsAt: input.startsAt.toISOString(),
+      endsAt: input.endsAt.toISOString(),
+    })),
+    ...(ctx.override
+      ? {
+          override: {
+            reason: ctx.override.reason,
+            note: ctx.override.note,
+            approvedById: ctx.actor.id,
+            createdAt: new Date().toISOString(),
+          },
+        }
+      : {}),
+  };
 
-    const updated = await tx.appointment.findUniqueOrThrow({
-      where: { id: current.id },
-    });
-    return updated;
-  });
+  store.appointments[idx] = updated;
+  await writeStore(store);
+  return updated;
 }
