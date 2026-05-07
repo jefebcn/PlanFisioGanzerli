@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import type {
   StoredPatient, StoredResource, StoredTherapy, StoredUser, UserRole,
@@ -41,7 +41,10 @@ export function BookingDialog({
   currentUserRole, onCreated,
 }: Props) {
   const [therapistId, setTherapistId] = useState(therapists[0]?.id ?? '');
+  // patientId is '' when the user typed a new name not yet saved
   const [patientId, setPatientId] = useState(patients[0]?.id ?? '');
+  const [patientInput, setPatientInput] = useState(patients[0]?.fullName ?? '');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [therapyId, setTherapyId] = useState(therapies[0]?.id ?? '');
   const [date, setDate] = useState(toDateStr(defaultStartsAt));
   const [startTime, setStartTime] = useState(toTimeStr(defaultStartsAt));
@@ -51,12 +54,34 @@ export function BookingDialog({
   const [report, setReport] = useState<ConflictReport | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // Sync local state when defaultStartsAt prop changes (slot click).
   useEffect(() => {
     setDate(toDateStr(defaultStartsAt));
     setStartTime(toTimeStr(defaultStartsAt));
   }, [defaultStartsAt]);
+
+  // Reset patient to first in list when dialog opens
+  useEffect(() => {
+    if (open && patients.length > 0) {
+      setPatientId(patients[0].id);
+      setPatientInput(patients[0].fullName);
+    }
+  }, [open]);
+
+  const filteredPatients = useMemo(() => {
+    const q = patientInput.trim().toLowerCase();
+    if (!q) return patients;
+    return patients.filter((p) => p.fullName.toLowerCase().includes(q));
+  }, [patients, patientInput]);
+
+  const isNewPatient = useMemo(() => {
+    const trimmed = patientInput.trim();
+    if (!trimmed) return false;
+    return !patients.some((p) => p.fullName.toLowerCase() === trimmed.toLowerCase());
+  }, [patients, patientInput]);
 
   const therapy = useMemo(() => therapies.find((t) => t.id === therapyId), [therapies, therapyId]);
   const startsAtDate = useMemo(() => combine(date, startTime), [date, startTime]);
@@ -66,7 +91,6 @@ export function BookingDialog({
   }, [startsAtDate, therapy]);
 
   const canOverride = OVERRIDE_ROLES.includes(currentUserRole);
-  const selectedPatient = patients.find((p) => p.id === patientId);
 
   // Auto-suggest required resources.
   useEffect(() => {
@@ -77,9 +101,9 @@ export function BookingDialog({
     setResourceIds(pick);
   }, [therapy, resources]);
 
-  // Live conflict check.
+  // Live conflict check — skip if new patient (no ID yet)
   useEffect(() => {
-    if (!open || !therapistId || !patientId || !therapyId || !endsAtDate) { setReport(null); return; }
+    if (!open || !therapistId || !patientId || isNewPatient || !therapyId || !endsAtDate) { setReport(null); return; }
     const handle = setTimeout(async () => {
       const res = await fetch('/api/appointments/check', {
         method: 'POST',
@@ -97,19 +121,59 @@ export function BookingDialog({
       }
     }, 300);
     return () => clearTimeout(handle);
-  }, [open, therapistId, patientId, therapyId, startsAtDate, endsAtDate, resourceIds]);
+  }, [open, therapistId, patientId, isNewPatient, therapyId, startsAtDate, endsAtDate, resourceIds]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
+        inputRef.current && !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
 
   if (!open) return null;
 
+  function selectPatient(p: Pick<StoredPatient, 'id' | 'fullName'>) {
+    setPatientId(p.id);
+    setPatientInput(p.fullName);
+    setShowSuggestions(false);
+  }
+
   async function submit(override?: OverrideInput) {
     if (!endsAtDate) return;
+    const trimmedName = patientInput.trim();
+    if (!trimmedName) return;
     setSubmitting(true);
     try {
+      let resolvedPatientId = patientId;
+
+      // Create new patient on the fly
+      if (isNewPatient) {
+        const pRes = await fetch('/api/patients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fullName: trimmedName }),
+        });
+        if (!pRes.ok) {
+          alert('Errore nella creazione del paziente');
+          return;
+        }
+        const { patient } = await pRes.json();
+        resolvedPatientId = patient.id;
+        setPatientId(patient.id);
+      }
+
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          therapistId, patientId, therapyId,
+          therapistId, patientId: resolvedPatientId, therapyId,
           startsAt: startsAtDate.toISOString(),
           endsAt: endsAtDate.toISOString(),
           resourceIds,
@@ -135,17 +199,13 @@ export function BookingDialog({
     }
   }
 
-  const submitDisabled = submitting || !endsAtDate || (report?.hasHardConflict ?? false);
-
-  const dateLabel = startsAtDate.toLocaleDateString('it-IT', {
-    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
-  });
+  const submitDisabled = submitting || !endsAtDate || !patientInput.trim() || (report?.hasHardConflict ?? false);
 
   return (
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-          {/* Header with patient title */}
+          {/* Header with patient combobox */}
           <div className="px-6 pt-6 pb-4 relative">
             <button
               onClick={onClose}
@@ -156,15 +216,62 @@ export function BookingDialog({
             <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
               Nuovo appuntamento
             </div>
-            <select
-              value={patientId}
-              onChange={(e) => setPatientId(e.target.value)}
-              className="w-full text-2xl font-bold text-slate-900 bg-transparent border-0 outline-none cursor-pointer hover:text-violet-600 transition appearance-none -ml-0.5"
-            >
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>{p.fullName}</option>
-              ))}
-            </select>
+
+            {/* Patient combobox */}
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={patientInput}
+                onChange={(e) => {
+                  setPatientInput(e.target.value);
+                  setPatientId('');
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                placeholder="Nome paziente…"
+                className="w-full text-2xl font-bold text-slate-900 bg-transparent border-0 outline-none placeholder:text-slate-300 -ml-0.5"
+              />
+              {isNewPatient && (
+                <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full">
+                  Nuovo
+                </span>
+              )}
+
+              {/* Suggestions dropdown */}
+              {showSuggestions && (
+                <div
+                  ref={suggestionsRef}
+                  className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden"
+                >
+                  {filteredPatients.length > 0 ? (
+                    <ul className="max-h-48 overflow-y-auto py-1">
+                      {filteredPatients.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectPatient(p); }}
+                            className={clsx(
+                              'w-full text-left px-4 py-2 text-sm font-medium transition-colors',
+                              patientId === p.id
+                                ? 'bg-violet-50 text-violet-700'
+                                : 'text-slate-700 hover:bg-slate-50',
+                            )}
+                          >
+                            {p.fullName}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-slate-400">
+                      Nessun paziente trovato —{' '}
+                      <span className="font-semibold text-violet-600">verrà creato al salvataggio</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Body */}
