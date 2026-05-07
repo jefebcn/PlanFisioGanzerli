@@ -23,29 +23,34 @@ export async function writeStore(data: DataStore): Promise<void> {
 async function readFromBlob(): Promise<DataStore> {
   try {
     const mod = await import('@vercel/blob');
-    // v2 SDK exposes get() for both public and private blobs.
-    if (typeof mod.get === 'function') {
-      try {
-        const result = await mod.get(BLOB_PATH, { access: 'private' as const });
-        if (result && (result as any).blob) {
-          const text = await (result as any).blob.text();
-          return mergeWithDefaults(JSON.parse(text) as DataStore);
-        }
-      } catch {
-        // Fall through to list+fetch fallback
+
+    // head() returns metadata including downloadUrl — a direct presigned URL
+    // that bypasses the CDN edge cache. Without this, fetching the .url field
+    // returns stale content even after a successful put() because Vercel's CDN
+    // ignores the `?t=` query param when caching by pathname.
+    let directUrl: string;
+    try {
+      const meta = await mod.head(BLOB_PATH);
+      directUrl = (meta as { downloadUrl?: string }).downloadUrl ?? meta.url;
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      const message = err instanceof Error ? err.message : String(err);
+      if (status === 404 || /not.?found|does.?not.?exist/i.test(message)) {
+        return structuredClone(DEFAULT_DATA);
       }
+      throw err;
     }
-    // Fallback for older SDK or different store config: list + fetch
-    const { blobs } = await mod.list({ prefix: BLOB_PATH });
-    const blob = blobs.find((b) => b.pathname === BLOB_PATH);
-    if (!blob) return structuredClone(DEFAULT_DATA);
-    const res = await fetch(blob.url + '?t=' + Date.now(), {
+
+    const res = await fetch(directUrl, {
       cache: 'no-store',
       headers: process.env.BLOB_READ_WRITE_TOKEN
         ? { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
         : undefined,
     });
-    if (!res.ok) return structuredClone(DEFAULT_DATA);
+    if (!res.ok) {
+      console.error('[blobStore] read fetch failed', res.status);
+      return structuredClone(DEFAULT_DATA);
+    }
     return mergeWithDefaults((await res.json()) as DataStore);
   } catch (err) {
     console.error('[blobStore] readFromBlob failed', err);

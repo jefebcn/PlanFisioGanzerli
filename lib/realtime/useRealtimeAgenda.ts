@@ -16,6 +16,10 @@ export interface RealtimeHandlers {
   onDeleted?: (id: string) => void;
 }
 
+// Realtime is only enabled when NEXT_PUBLIC_SOCKET_URL points to an external
+// Socket.IO server. Vercel serverless doesn't support persistent WebSocket
+// connections, so on the default deployment this hook is a no-op and the UI
+// relies on optimistic updates + manual refetch.
 export function useRealtimeAgenda(
   studioId: string,
   dateISO: string,
@@ -27,15 +31,21 @@ export function useRealtimeAgenda(
 
   useEffect(() => {
     if (!dateISO) return;
-    const url = process.env.NEXT_PUBLIC_SOCKET_URL || '';
+    const url = process.env.NEXT_PUBLIC_SOCKET_URL;
+    if (!url) return;
+
     const socket: Socket = io(url, {
       path: '/api/socket.io',
       transports: ['websocket', 'polling'],
+      reconnectionAttempts: 3,
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       socket.emit(SOCKET_EVENTS.joinRoom, { studioId, dateISO });
+    });
+    socket.on('connect_error', () => {
+      socket.disconnect();
     });
 
     socket.on(SOCKET_EVENTS.appointmentCreated, (e: AppointmentCreatedEvent) => {
