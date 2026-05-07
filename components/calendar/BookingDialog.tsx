@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import type {
   StoredPatient, StoredResource, StoredTherapy, StoredUser, UserRole,
 } from '@/lib/storage/types';
+import type { AppointmentDTO } from '@/lib/agenda/types';
 import { OVERRIDE_ROLES, type ConflictReport, type OverrideInput } from '@/lib/conflicts/types';
 import { ConflictBanner } from './ConflictBanner';
 import { OverrideModal } from './OverrideModal';
@@ -18,7 +19,7 @@ interface Props {
   therapies: StoredTherapy[];
   resources: StoredResource[];
   currentUserRole: UserRole;
-  onCreated: () => void;
+  onCreated: (appointment?: AppointmentDTO) => void;
 }
 
 const HOURS_OPTIONS = Array.from({ length: 28 }, (_, i) => {
@@ -176,7 +177,8 @@ export function BookingDialog({
         alert(`Errore: ${json.error ?? res.statusText}${detail}`);
         return;
       }
-      onCreated();
+      const json = await res.json().catch(() => ({}));
+      onCreated(json.appointment as AppointmentDTO | undefined);
       onClose();
     } finally {
       setSubmitting(false);

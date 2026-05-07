@@ -1,4 +1,4 @@
-import type { AppointmentWithResources } from './events';
+type BroadcastableAppointment = { startsAt: string; [k: string]: unknown };
 import { SOCKET_EVENTS, studioRoom } from './events';
 
 const DEFAULT_STUDIO = 'default';
@@ -14,7 +14,7 @@ async function emitToRoom(event: string, room: string, payload: object) {
   }
 }
 
-export function broadcastAppointmentCreated(appointment: AppointmentWithResources) {
+export function broadcastAppointmentCreated(appointment: BroadcastableAppointment) {
   void emitToRoom(
     SOCKET_EVENTS.appointmentCreated,
     studioRoom(DEFAULT_STUDIO, appointment.startsAt.slice(0, 10)),
@@ -22,7 +22,7 @@ export function broadcastAppointmentCreated(appointment: AppointmentWithResource
   );
 }
 
-export function broadcastAppointmentUpdated(appointment: AppointmentWithResources) {
+export function broadcastAppointmentUpdated(appointment: BroadcastableAppointment) {
   void emitToRoom(
     SOCKET_EVENTS.appointmentUpdated,
     studioRoom(DEFAULT_STUDIO, appointment.startsAt.slice(0, 10)),

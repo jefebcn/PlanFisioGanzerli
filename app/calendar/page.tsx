@@ -58,6 +58,19 @@ export default function CalendarPage() {
     }
   }, [date]);
 
+  const handleCreated = useCallback((appointment?: AppointmentDTO) => {
+    // Optimistic merge: insert the new appointment directly so the user sees it
+    // immediately, even if the next blob read returns stale data due to CDN
+    // propagation. A background refetch reconciles state shortly after.
+    if (appointment) {
+      setAppointments((prev) => {
+        if (prev.some((a) => a.id === appointment.id)) return prev;
+        return [...prev, appointment].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+      });
+    }
+    refetchAppointments();
+  }, [refetchAppointments]);
+
   useEffect(() => {
     Promise.all([
       fetch('/api/therapists').then((r) => r.json()),
@@ -123,6 +136,11 @@ export default function CalendarPage() {
         }
         if (json.error === 'STALE_VERSION') {
           alert('Appuntamento modificato da un altro utente, ricarico…');
+        }
+      } else if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        if (json.appointment) {
+          setAppointments((prev) => prev.map((a) => a.id === json.appointment.id ? json.appointment : a));
         }
       }
       refetchAppointments();
@@ -304,7 +322,7 @@ export default function CalendarPage() {
           therapies={therapies}
           resources={resources}
           currentUserRole={me.role}
-          onCreated={refetchAppointments}
+          onCreated={handleCreated}
         />
       )}
 

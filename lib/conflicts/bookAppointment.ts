@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { readStore, writeStore } from '@/lib/storage/blobStore';
 import type { StoredAppointment } from '@/lib/storage/types';
+import { joinAppointment } from '@/lib/agenda/joinAppointment';
+import type { AppointmentDTO } from '@/lib/agenda/types';
 import { checkConflict } from './checkConflict';
 import { ConflictError, OverrideNotAllowedError, StaleVersionError } from './errors';
 import {
@@ -35,7 +37,7 @@ function checkOverride(ctx: BookingContext): void {
 export async function bookAppointment(
   input: BookAppointmentInput,
   ctx: BookingContext,
-): Promise<StoredAppointment> {
+): Promise<AppointmentDTO> {
   const store = await readStore();
 
   // Create patient atomically in the same read-write cycle to avoid race conditions
@@ -88,13 +90,13 @@ export async function bookAppointment(
 
   store.appointments.push(appointment);
   await writeStore(store);
-  return appointment;
+  return joinAppointment(appointment, store);
 }
 
 export async function moveAppointment(
   input: MoveAppointmentInput,
   ctx: BookingContext,
-): Promise<StoredAppointment> {
+): Promise<AppointmentDTO> {
   const store = await readStore();
   const idx = store.appointments.findIndex((a) => a.id === input.appointmentId);
   if (idx === -1) throw new Error(`Appointment ${input.appointmentId} non trovato`);
@@ -145,5 +147,5 @@ export async function moveAppointment(
 
   store.appointments[idx] = updated;
   await writeStore(store);
-  return updated;
+  return joinAppointment(updated, store);
 }

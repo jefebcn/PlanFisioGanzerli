@@ -4,6 +4,7 @@ import { getCurrentActor } from '@/lib/auth';
 import { bookAppointment, ConflictError, OverrideNotAllowedError } from '@/lib/conflicts';
 import { broadcastAppointmentCreated } from '@/lib/realtime/broadcast';
 import { createAppointmentSchema } from '@/lib/validation';
+import { joinAppointment } from '@/lib/agenda/joinAppointment';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,29 +26,7 @@ export async function GET(request: Request) {
 
   const appointments = appts
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
-    .map((a) => {
-      const therapist = store.users.find((u) => u.id === a.therapistId);
-      const patient = store.patients.find((p) => p.id === a.patientId);
-      const therapy = store.therapies.find((t) => t.id === a.therapyId);
-      return {
-        ...a,
-        therapist: therapist
-          ? { id: therapist.id, name: therapist.name, color: therapist.color }
-          : { id: a.therapistId, name: 'Operatore', color: '#94a3b8' },
-        patient: patient
-          ? { id: patient.id, fullName: patient.fullName }
-          : { id: a.patientId, fullName: 'Paziente' },
-        therapy: therapy
-          ? { id: therapy.id, name: therapy.name, durationMinutes: therapy.durationMinutes }
-          : { id: a.therapyId, name: 'Terapia', durationMinutes: 0 },
-        resourceBookings: a.resourceBookings.map((rb) => ({
-          ...rb,
-          resource: store.resources.find((r) => r.id === rb.resourceId)
-            ?? { id: rb.resourceId, name: 'Risorsa', type: 'ROOM' as const, active: true },
-        })),
-        override: a.override ?? null,
-      };
-    });
+    .map((a) => joinAppointment(a, store));
 
   return NextResponse.json({ appointments });
 }
