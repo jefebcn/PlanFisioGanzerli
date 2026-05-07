@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-
-export const dynamic = 'force-dynamic';
 import { getCurrentActor } from '@/lib/auth';
 import {
   ConflictError,
@@ -14,6 +12,8 @@ import {
   broadcastAppointmentUpdated,
 } from '@/lib/realtime/broadcast';
 import { moveAppointmentSchema } from '@/lib/validation';
+
+export const dynamic = 'force-dynamic';
 
 export async function PATCH(
   request: Request,

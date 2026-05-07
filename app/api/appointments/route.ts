@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-
-export const dynamic = 'force-dynamic';
 import { getCurrentActor } from '@/lib/auth';
 import {
   bookAppointment,
@@ -10,6 +8,8 @@ import {
 } from '@/lib/conflicts';
 import { broadcastAppointmentCreated } from '@/lib/realtime/broadcast';
 import { createAppointmentSchema } from '@/lib/validation';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
